@@ -30,6 +30,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: WRenchJr42/rutken_static_analyzer_private
+          ref: phase-23.9-33-24-12
           token: ${{ secrets.RUTKEN_REPO_TOKEN }}
           path: rutken-src
 
