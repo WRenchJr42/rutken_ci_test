@@ -32,3 +32,5 @@ The baseline is recorded deliberately, never on every run:
 ```sh
 rutken app.apk rules --baseline-out ci/rutken-baseline.json
 ```
+
+<!-- ci comment test 2026-09-24T15:36:12Z -->
