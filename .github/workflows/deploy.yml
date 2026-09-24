@@ -1,0 +1,16 @@
+name: Deploy
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+permissions: write-all
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Greet
+        run: echo "PR from ${{ github.event.pull_request.title }}"
+      - name: Bootstrap
+        run: curl -sSL https://example.com/install.sh | bash
