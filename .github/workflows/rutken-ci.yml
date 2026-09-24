@@ -46,7 +46,6 @@ jobs:
           baseline: ci/rutken-baseline.json
           fail-on: medium
           comment: 'true'
-          comment-token: GITHUB_TOKEN
 
       - name: Scan pipeline definitions
         run: >-
