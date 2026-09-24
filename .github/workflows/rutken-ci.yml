@@ -1,0 +1,47 @@
+name: Rutken CI
+
+# Runs Rutken as a build gate on every push to main and every pull request:
+#  1. APK gate   - fail the build only on findings NEW or ESCALATED vs the
+#                  committed baseline (ci/rutken-baseline.json).
+#  2. Pipeline scan - scan this repo's own workflow files for insecure
+#                  CI/CD patterns (pwn requests, script injection, ...).
+#
+# Rutken is a private tool, so CI builds it from source. This needs a repo
+# secret RUTKEN_REPO_TOKEN: a PAT (or fine-grained token) with read access
+# to WRenchJr42/rutken_static_analyzer_private. Add it under
+# Settings > Secrets and variables > Actions before the first run.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rutken:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out this repo
+        uses: actions/checkout@v4
+
+      - name: Check out Rutken (private source)
+        uses: actions/checkout@v4
+        with:
+          repository: WRenchJr42/rutken_static_analyzer_private
+          token: ${{ secrets.RUTKEN_REPO_TOKEN }}
+          path: rutken-src
+
+      - name: Build rutken
+        run: cargo build --release -p cli --manifest-path rutken-src/Cargo.toml
+
+      - name: APK gate (baseline delta)
+        run: >-
+          rutken-src/target/release/rutken app.apk rules
+          --baseline ci/rutken-baseline.json --fail-on medium
+
+      - name: Scan pipeline definitions
+        run: >-
+          rutken-src/target/release/rutken cicd scan .github/workflows
+          --fail-on high

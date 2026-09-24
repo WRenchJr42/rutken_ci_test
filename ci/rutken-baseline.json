@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "id_scheme": 1,
+  "tool": {
+    "name": "rutken",
+    "version": "0.2.0"
+  },
+  "generated_at": "1790248331",
+  "target": {
+    "sha256": "3e6f6b538b82874dd94c0d8cdadd69ba54d49b59d2c7eb055073892e8a4fc0e0",
+    "path": "app.apk"
+  },
+  "scope": {
+    "producer": "rules",
+    "rule": [],
+    "exclude_rule": [],
+    "interprocedural": false,
+    "interprocedural_params": false
+  },
+  "findings": [
+    {
+      "id": "android-debuggable-418a5d3d1fff15ad",
+      "rule_id": "android-debuggable",
+      "severity": "medium",
+      "title": "Application is debuggable",
+      "location": ""
+    },
+    {
+      "id": "android-allow-backup-36e3f0775314510e",
+      "rule_id": "android-allow-backup",
+      "severity": "low",
+      "title": "Application allows ADB/cloud backup",
+      "location": ""
+    },
+    {
+      "id": "weak-crypto-algorithm-7047d7535feb7cad",
+      "rule_id": "weak-crypto-algorithm",
+      "severity": "medium",
+      "title": "CBC mode with PKCS5/PKCS7 padding (padding-oracle exposure): AES/CBC/PKCS7Padding",
+      "location": "Landroidx/biometric/CryptoObjectUtils;->createFakeCryptoObject @49"
+    },
+    {
+      "id": "weak-crypto-algorithm-c2922320b542731b",
+      "rule_id": "weak-crypto-algorithm",
+      "severity": "low",
+      "title": "Weak digest algorithm instantiated: MD5",
+      "location": "Lowasp/sat/agoat/AccessControlIssue1Activity;->hashPIN @2"
+    },
+    {
+      "id": "taint-reaches-sink-86acfea87ddba473",
+      "rule_id": "taint-reaches-sink",
+      "severity": "low",
+      "title": "Untrusted input reaches Landroid/util/Log;->v",
+      "location": "Landroidx/constraintlayout/motion/widget/MotionLayout$Model;->debugLayout @311"
+    },
+    {
+      "id": "taint-reaches-sink-26a0e58c3d0583e2",
+      "rule_id": "taint-reaches-sink",
+      "severity": "low",
+      "title": "Untrusted input reaches Landroid/util/Log;->w",
+      "location": "Landroidx/core/graphics/drawable/IconCompat;->createFromBundle @100"
+    },
+    {
+      "id": "taint-reaches-sink-43017f7a86a79ec2",
+      "rule_id": "taint-reaches-sink",
+      "severity": "low",
+      "title": "Untrusted input reaches Landroid/util/Log;->w",
+      "location": "Landroidx/legacy/content/WakefulBroadcastReceiver;->completeWakefulIntent @55"
+    },
+    {
+      "id": "taint-reaches-sink-38b3c7cf84a8e952",
+      "rule_id": "taint-reaches-sink",
+      "severity": "medium",
+      "title": "Untrusted input reaches Landroid/webkit/WebView;->loadUrl",
+      "location": "Lowasp/sat/agoat/InputValidationsWebViewURLActivity;->onCreate$lambda$0 @34"
+    },
+    {
+      "id": "taint-reaches-sink-6c8408e9e5f94f89",
+      "rule_id": "taint-reaches-sink",
+      "severity": "low",
+      "title": "Untrusted input reaches Landroid/util/Log;->i",
+      "location": "Lowasp/sat/agoat/InsecureLoggingActivity;->onCreate$lambda$1 @56"
+    },
+    {
+      "id": "taint-reaches-sink-6093652a6fe436f4",
+      "rule_id": "taint-reaches-sink",
+      "severity": "low",
+      "title": "Untrusted input reaches Landroid/util/Log;->v",
+      "location": "Lowasp/sat/agoat/InsecureStorageSQLiteActivity;->onCreate$lambda$1 @214"
+    },
+    {
+      "id": "taint-reaches-sink-61feb7419b382096",
+      "rule_id": "taint-reaches-sink",
+      "severity": "low",
+      "title": "Untrusted input reaches Landroid/util/Log;->e",
+      "location": "Lowasp/sat/agoat/SQLinjectionActivity;->onCreate$lambda$1 @214"
+    },
+    {
+      "id": "taint-reaches-sink-400419928eae4057",
+      "rule_id": "taint-reaches-sink",
+      "severity": "low",
+      "title": "Untrusted input reaches Landroid/util/Log;->v",
+      "location": "Lowasp/sat/agoat/SQLinjectionActivity;->onCreate$lambda$1 @337"
+    },
+    {
+      "id": "webview-insecure-file-access-a6088602f9e17cf4",
+      "rule_id": "webview-insecure-file-access",
+      "severity": "medium",
+      "title": "WebSettings.setAllowFileAccessFromFileURLs(true) allows insecure file:// URL access",
+      "location": "Lowasp/sat/agoat/InputValidationsWebViewURLActivity;->onCreate$lambda$0 @20"
+    },
+    {
+      "id": "webview-insecure-file-access-9e1eb5be35162cb8",
+      "rule_id": "webview-insecure-file-access",
+      "severity": "high",
+      "title": "WebSettings.setAllowUniversalAccessFromFileURLs(true) allows insecure file:// URL access",
+      "location": "Lowasp/sat/agoat/InputValidationsWebViewURLActivity;->onCreate$lambda$0 @23"
+    },
+    {
+      "id": "sql-injection-via-rawquery-d7a9890e17c09674",
+      "rule_id": "sql-injection-via-rawquery",
+      "severity": "high",
+      "title": "Untrusted input reaches Landroid/database/sqlite/SQLiteDatabase;->execSQL",
+      "location": "Lowasp/sat/agoat/InsecureStorageSQLiteActivity;->onCreate$lambda$1 @72"
+    },
+    {
+      "id": "sql-injection-via-rawquery-eeed7cc43d6fe33a",
+      "rule_id": "sql-injection-via-rawquery",
+      "severity": "high",
+      "title": "Untrusted input reaches Landroid/database/sqlite/SQLiteDatabase;->rawQuery",
+      "location": "Lowasp/sat/agoat/SQLinjectionActivity;->onCreate$lambda$1 @56"
+    },
+    {
+      "id": "exported-component-no-permission-d0d36a748c80e626",
+      "rule_id": "exported-component-no-permission",
+      "severity": "low",
+      "title": "Activity owasp.sat.agoat.AccessControl1ViewActivity is exported with no permission",
+      "location": "owasp.sat.agoat.AccessControl1ViewActivity->?"
+    },
+    {
+      "id": "exported-component-no-permission-3e2c46f85a1955be",
+      "rule_id": "exported-component-no-permission",
+      "severity": "medium",
+      "title": "Receiver owasp.sat.agoat.ShowDataReceiver is exported with no permission",
+      "location": "owasp.sat.agoat.ShowDataReceiver->?"
+    },
+    {
+      "id": "exported-component-no-permission-5b92b8fd26e8a70c",
+      "rule_id": "exported-component-no-permission",
+      "severity": "medium",
+      "title": "Service owasp.sat.agoat.DownloadInvoiceService is exported with no permission",
+      "location": "owasp.sat.agoat.DownloadInvoiceService->?"
+    },
+    {
+      "id": "exported-component-no-permission-d474241bdec5c024",
+      "rule_id": "exported-component-no-permission",
+      "severity": "medium",
+      "title": "Provider owasp.sat.agoat.ContentProviderActivity is exported with no permission",
+      "location": "owasp.sat.agoat.ContentProviderActivity->?"
+    },
+    {
+      "id": "clipboard-write-not-marked-sensitive-ef73fafebf1bb0c6",
+      "rule_id": "clipboard-write-not-marked-sensitive",
+      "severity": "low",
+      "title": "Lowasp/sat/agoat/ClipboardActivity; writes to the clipboard",
+      "location": "Lowasp/sat/agoat/ClipboardActivity;->onCreate$lambda$1 @96"
+    },
+    {
+      "id": "network-security-config-insecure-edd58c78f5317071",
+      "rule_id": "network-security-config-insecure",
+      "severity": "medium",
+      "title": "Network Security Config permits cleartext traffic",
+      "location": ""
+    },
+    {
+      "id": "network-security-config-insecure-28cb3a4006e743f7",
+      "rule_id": "network-security-config-insecure",
+      "severity": "medium",
+      "title": "Network Security Config trusts user-installed CA certificates",
+      "location": ""
+    },
+    {
+      "id": "min-sdk-below-supported-d1a5984cdad74ff0",
+      "rule_id": "min-sdk-below-supported",
+      "severity": "info",
+      "title": "minSdkVersion 19 is below the runtime-permissions floor (API 23)",
+      "location": ""
+    },
+    {
+      "id": "android-hardcoded-secret-91264ac59b8bca28",
+      "rule_id": "android-hardcoded-secret",
+      "severity": "high",
+      "title": "Server-side secret embedded in APK",
+      "location": ""
+    },
+    {
+      "id": "biometric-auth-without-cryptoobject-02fbcbd9926bd6ae",
+      "rule_id": "biometric-auth-without-cryptoobject",
+      "severity": "medium",
+      "title": "Lowasp/sat/agoat/BioMetricAuthActivity;->Lowasp/sat/agoat/BioMetricAuthActivity;->onCreate$lambda$0 authenticates without a CryptoObject",
+      "location": "Lowasp/sat/agoat/BioMetricAuthActivity;->onCreate$lambda$0 @97"
+    }
+  ]
+}
