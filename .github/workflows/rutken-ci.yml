@@ -2,11 +2,11 @@ name: Rutken CI
 
 # Rutken as a build gate on every push to main and every PR:
 #  1. APK gate + PR comment - via the rutken-scan composite action (built
-#     from the private source checked out to rutken-src). Fails only on
-#     findings NEW/ESCALATED vs ci/rutken-baseline.json, and (on PRs) posts
-#     an idempotent baseline-delta summary comment.
-#  2. Pipeline scan - scan this repo's own workflow files for insecure
-#     CI/CD patterns.
+#     from the private source in rutken-src). Fails only on findings
+#     NEW/ESCALATED vs ci/rutken-baseline.json; on PRs posts an idempotent
+#     baseline-delta summary comment; writes SARIF anchored to app.apk.
+#  2. Upload SARIF - surfaces findings in the repo's Security > Code scanning.
+#  3. Pipeline scan - scan this repo's own workflow files.
 # Needs repo secret RUTKEN_REPO_TOKEN (read access to the private rutken repo).
 
 on:
@@ -17,6 +17,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  security-events: write
 
 jobs:
   rutken:
@@ -36,7 +37,8 @@ jobs:
       - name: Build rutken
         run: cargo build --release -p cli --manifest-path rutken-src/Cargo.toml
 
-      - name: APK gate + PR comment
+      - name: APK gate + PR comment + SARIF
+        id: scan
         uses: ./rutken-src/.github/actions/rutken-scan
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -46,6 +48,13 @@ jobs:
           baseline: ci/rutken-baseline.json
           fail-on: medium
           comment: 'true'
+          artifact-uri: app.apk
+
+      - name: Upload SARIF to Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: rutken.sarif
 
       - name: Scan pipeline definitions
         run: >-
