@@ -10,6 +10,7 @@ name: Rutken CI
 # Needs repo secret RUTKEN_REPO_TOKEN (read access to the private rutken repo).
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
