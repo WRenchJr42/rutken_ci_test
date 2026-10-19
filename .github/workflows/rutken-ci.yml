@@ -1,13 +1,20 @@
 name: Rutken CI
 
-# Rutken as a build gate on every push to main and every PR:
-#  1. APK gate + PR comment - via the rutken-scan composite action (built
-#     from the private source in rutken-src). Fails only on findings
-#     NEW/ESCALATED vs ci/rutken-baseline.json; on PRs posts an idempotent
-#     baseline-delta summary comment; writes SARIF anchored to app.apk.
-#  2. Upload SARIF - surfaces findings in the repo's Security > Code scanning.
-#  3. Pipeline scan - scan this repo's own workflow files.
-# Needs repo secret RUTKEN_REPO_TOKEN (read access to the private rutken repo).
+# Rutken as a build gate on every push to main and every PR, using a
+# PREBUILT minimal rutken binary pulled from Azure (no source checkout,
+# no cargo build):
+#  1. Fetch the prebuilt binary from the SAS URL (secret RUTKEN_BINARY_URL).
+#  2. Install the entitlement JWT (secret RUTKEN_ENTITLEMENT_JWT) so the
+#     paid CI gates (CiGate / CicdConfigScan) are granted at runtime.
+#  3. APK gate + PR comment + SARIF - via the vendored rutken-scan action.
+#     Fails only on findings NEW/ESCALATED vs ci/rutken-baseline.json.
+#  4. Upload SARIF - surfaces findings in Security > Code scanning.
+#  5. Pipeline scan - scan this repo's own workflow files.
+#
+# Secrets needed: RUTKEN_BINARY_URL (7-day read-only Azure SAS to the
+# prebuilt binary; re-mint weekly) and RUTKEN_ENTITLEMENT_JWT (the verbatim
+# contents of a Pro+ ~/.rutken/entitlement.jwt; re-export on expiry).
+# RUTKEN_REPO_TOKEN is no longer used - remove it.
 
 on:
   workflow_dispatch:
@@ -20,6 +27,9 @@ permissions:
   pull-requests: write
   security-events: write
 
+env:
+  RUTKEN_HOME: ${{ github.workspace }}/.rutken
+
 jobs:
   rutken:
     runs-on: ubuntu-latest
@@ -27,25 +37,29 @@ jobs:
       - name: Check out this repo
         uses: actions/checkout@v4
 
-      - name: Check out Rutken (private source)
-        uses: actions/checkout@v4
-        with:
-          repository: WRenchJr42/rutken_static_analyzer_private
-          ref: phase-23.9-33-24-12
-          token: ${{ secrets.RUTKEN_REPO_TOKEN }}
-          path: rutken-src
+      - name: Fetch prebuilt Rutken binary (Azure SAS)
+        env:
+          RUTKEN_BINARY_URL: ${{ secrets.RUTKEN_BINARY_URL }}
+        run: |
+          curl -fsSL "$RUTKEN_BINARY_URL" -o rutken
+          chmod +x rutken
+          ./rutken --version
 
-      - name: Build rutken
-        run: cargo build --release -p cli --manifest-path rutken-src/Cargo.toml
+      - name: Install entitlement
+        env:
+          RUTKEN_ENTITLEMENT_JWT: ${{ secrets.RUTKEN_ENTITLEMENT_JWT }}
+        run: |
+          mkdir -p "$RUTKEN_HOME"
+          printf '%s' "$RUTKEN_ENTITLEMENT_JWT" > "$RUTKEN_HOME/entitlement.jwt"
 
       - name: APK gate + PR comment + SARIF
         id: scan
-        uses: ./rutken-src/.github/actions/rutken-scan
+        uses: ./.github/actions/rutken-scan
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           apk: app.apk
-          rutken-path: rutken-src/target/release/rutken
+          rutken-path: ./rutken
           baseline: ci/rutken-baseline.json
           fail-on: medium
           comment: 'true'
@@ -58,6 +72,4 @@ jobs:
           sarif_file: rutken.sarif
 
       - name: Scan pipeline definitions
-        run: >-
-          rutken-src/target/release/rutken cicd scan .github/workflows
-          --fail-on high
+        run: ./rutken cicd scan . --fail-on high
