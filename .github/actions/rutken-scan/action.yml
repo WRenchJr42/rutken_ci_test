@@ -1,0 +1,336 @@
+name: 'Rutken APK scan'
+description: >-
+  Runs the rutken static analyzer over a single APK (or a directory of
+  APKs, via `rutken batch`), writes a SARIF report for GitHub Code
+  Scanning, and (optionally) a markdown job summary and a PR
+  baseline-delta summary comment (`comment: 'true'`, APK-only, requires
+  `baseline`). Does not itself run `--fail-on` gating as a separate step
+  -- the gate verdict is rutken's own exit code (Phase 9.1), surfaced
+  here as the `exit-code` output and this action's own success/failure.
+inputs:
+  apk:
+    description: >-
+      Path to a single APK to analyze. Mutually exclusive with
+      `apk-dir`. Exactly one of `apk`/`apk-dir` is required.
+    required: false
+    default: ''
+  apk-dir:
+    description: >-
+      Path to a directory of `*.apk` files to analyze (dispatches to
+      `rutken batch --apk-dir`, non-recursive). Mutually exclusive with
+      `apk`.
+    required: false
+    default: ''
+  rutken-path:
+    description: >-
+      Name of (or path to) the `rutken` binary. Assumes the caller has
+      already put it on `PATH` (or set `install` below).
+    required: false
+    default: 'rutken'
+  install:
+    description: >-
+      Optional convenience install, run before scanning. `cargo` runs
+      `cargo install --locked --path .` against the current checkout
+      (only valid when this checkout *is* the rutken repo). Leave unset
+      if `rutken` is already installed / on `PATH`.
+    required: false
+    default: ''
+  rules:
+    description: >-
+      Comma-separated rule ids to run exclusively (passed through as
+      repeated `--rule`). Leave unset to run every registered rule.
+      Mutually exclusive with `exclude-rules`.
+    required: false
+    default: ''
+  exclude-rules:
+    description: >-
+      Comma-separated rule ids to exclude (passed through as repeated
+      `--exclude-rule`). Mutually exclusive with `rules`.
+    required: false
+    default: ''
+  interprocedural:
+    description: >-
+      `'true'` passes `--interprocedural` (interprocedural return-value
+      summaries -- see `rutken rules --help`). Off by default; can be
+      the most expensive pass rutken runs.
+    required: false
+    default: 'false'
+  fail-on:
+    description: >-
+      CI/CD exit-code gating threshold (`critical|high|medium|low|info`,
+      Phase 9.1). Leave unset for no gating -- rutken then only ever
+      exits `0` (clean) or `1` (tool/usage error).
+    required: false
+    default: ''
+  baseline:
+    description: >-
+      Path to a baseline file (`rutken <apk> rules --baseline`, Phase 60).
+      When set, the `fail-on` gate fires only on findings that are NEW or
+      whose severity has ESCALATED since the baseline -- not on findings
+      the baseline already accepted. A baseline that cannot be read,
+      parsed, or compared is a hard failure (exit `1`), never a silent
+      full scan. APK-only: mutually exclusive with `apk-dir`, because
+      `rutken batch` has no baseline support.
+    required: false
+    default: ''
+  baseline-out:
+    description: >-
+      Path to WRITE a baseline of this run to (`--baseline-out`). This is
+      deliberately a separate, explicit input: a workflow that wrote the
+      baseline on every run would re-accept whatever it just found and the
+      gate would never fire again. Set it only in a job you run
+      intentionally to re-baseline (a manual dispatch, or a step gated on
+      a label), not in the job that gates pull requests. APK-only.
+    required: false
+    default: ''
+  sarif-file:
+    description: 'Path to write the SARIF report to.'
+    required: false
+    default: 'rutken.sarif'
+  artifact-uri:
+    description: >-
+      Repo-relative path to anchor SARIF results to (passed through as
+      `--sarif-artifact-uri`), so an uploaded `github/codeql-action/
+      upload-sarif` result has a `physicalLocation.artifactLocation.uri`
+      GitHub Code Scanning can render an alert against -- without it,
+      Code Scanning silently drops results that only carry a
+      `logicalLocations` entry. APK-only (`rutken batch` has no
+      `--sarif-artifact-uri`/`--artifact-uri` flag, so this input is a
+      no-op -- silently ignored, not an error -- when `apk-dir` is set).
+      Typically the `apk`/`apk-dir` input's own path. Rutken's
+      `FindingLocation` has no source `file:line` (it analyzes a built
+      APK, not a source tree; the SARIF renderer deliberately never
+      fakes a `region`), so the resulting Code Scanning alert is
+      anchored to this artifact path only -- no line highlight, no
+      inline PR review annotation. Leave unset (default) for
+      byte-identical output to before this input existed -- no
+      `--sarif-artifact-uri` is passed and results carry only a
+      `logicalLocations` entry.
+    required: false
+    default: ''
+  step-summary:
+    description: >-
+      `'true'` appends a markdown report to `$GITHUB_STEP_SUMMARY`.
+    required: false
+    default: 'true'
+  comment:
+    description: >-
+      `'true'` posts/updates the PR baseline-delta summary comment via
+      `rutken pr comment` (see `docs/plans/phase-ci-snyk-gaps.md`).
+      REQUIRES `baseline` to be set (the comment reports the delta
+      against it) and is APK-only, same restriction as `baseline`
+      itself. If `baseline` is empty or `apk-dir` is set, this input is
+      a no-op: a `::warning::` is printed and no comment is attempted --
+      commenting is a reporting convenience, never the gate. A failed
+      comment post never changes this action's exit code.
+    required: false
+    default: 'false'
+  comment-token:
+    description: >-
+      Name of the environment variable holding the token used to post
+      the comment (passed through as `pr comment --token-env`). Leave
+      unset to use `GITHUB_TOKEN` (GitHub Actions provides this by
+      default). Only consulted when `comment` is `'true'`.
+    required: false
+    default: ''
+outputs:
+  exit-code:
+    description: >-
+      rutken's own exit code: `0` clean, `1` tool/usage error OR a
+      baseline refusal (never a gate verdict), `2` the `--fail-on` gate
+      tripped. With `baseline` set, `2` means the gate tripped on a NEW or
+      severity-ESCALATED finding specifically -- findings the baseline
+      already accepted do not trip it.
+    value: ${{ steps.scan.outputs.exit-code }}
+  sarif-file:
+    description: 'Path to the written SARIF file (same as the `sarif-file` input).'
+    value: ${{ steps.scan.outputs.sarif-file }}
+  findings-total:
+    description: >-
+      Total finding count parsed out of the SARIF file. Omitted (not
+      set) if `jq` isn't available on the runner.
+    value: ${{ steps.scan.outputs.findings-total }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Install rutken
+      if: ${{ inputs.install == 'cargo' }}
+      shell: bash
+      run: cargo install --locked --path .
+
+    - name: Run rutken scan
+      id: scan
+      shell: bash
+      env:
+        RUTKEN: ${{ inputs.rutken-path }}
+        APK: ${{ inputs.apk }}
+        APK_DIR: ${{ inputs.apk-dir }}
+        RULES: ${{ inputs.rules }}
+        EXCLUDE_RULES: ${{ inputs.exclude-rules }}
+        INTERPROCEDURAL: ${{ inputs.interprocedural }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        SARIF_FILE: ${{ inputs.sarif-file }}
+        ARTIFACT_URI: ${{ inputs.artifact-uri }}
+        STEP_SUMMARY: ${{ inputs.step-summary }}
+        BASELINE: ${{ inputs.baseline }}
+        BASELINE_OUT: ${{ inputs.baseline-out }}
+        COMMENT: ${{ inputs.comment }}
+        COMMENT_TOKEN: ${{ inputs.comment-token }}
+      run: |
+        set +e
+
+        if [[ -z "$APK" && -z "$APK_DIR" ]]; then
+          echo "::error::rutken-scan requires exactly one of 'apk'/'apk-dir' (both are empty)"
+          exit 1
+        fi
+        if [[ -n "$APK" && -n "$APK_DIR" ]]; then
+          echo "::error::rutken-scan: 'apk' and 'apk-dir' are mutually exclusive, both were given"
+          exit 1
+        fi
+
+        # `rutken batch` has no --baseline/--baseline-out (Phase 60.7, may
+        # never ship), so refuse rather than silently ignoring them and
+        # reporting a gate result the caller will read as baselined.
+        if [[ -n "$APK_DIR" && ( -n "$BASELINE" || -n "$BASELINE_OUT" ) ]]; then
+          echo "::error::rutken-scan: 'baseline'/'baseline-out' are APK-only and cannot be combined with 'apk-dir' ('rutken batch' has no baseline support)"
+          exit 1
+        fi
+        # Defence in depth, NOT the fail-closed mechanism: measured
+        # 2026-09-24, with this check removed `rutken` itself still exits 1
+        # ("could not read baseline at ...: No such file or directory"). The
+        # check exists only to turn that into a GitHub ::error:: annotation
+        # naming the remedy, earlier and more legibly. Removing it does not
+        # open a hole -- but do not weaken the CLI's refusal on the
+        # assumption that this one covers it.
+        if [[ -n "$BASELINE" && ! -f "$BASELINE" ]]; then
+          echo "::error::rutken-scan: baseline file '$BASELINE' does not exist. Create one with 'baseline-out' in a separate, intentional re-baseline run -- this action will not fall back to an ungated scan."
+          exit 1
+        fi
+
+        baseline_args=()
+        if [[ -n "$BASELINE" ]]; then
+          baseline_args+=(--baseline "$BASELINE")
+        fi
+        # NOT included in `baseline_args`: the step summary below re-runs
+        # the scan, and passing --baseline-out to both would write the
+        # baseline twice.
+        baseline_out_args=()
+        if [[ -n "$BASELINE_OUT" ]]; then
+          baseline_out_args+=(--baseline-out "$BASELINE_OUT")
+        fi
+
+        # Delta envelope for `rutken pr comment` (Slice 1). Written
+        # whenever a baseline is set -- a side artifact under
+        # `$RUNNER_TEMP`, same rationale as `--baseline-delta-out`
+        # itself: it never changes `--format`'s output or `$code`, so
+        # writing it unconditionally (rather than only when `comment`
+        # is `'true'`) does not change this action's behaviour when
+        # commenting is off.
+        delta_file="${RUNNER_TEMP:-/tmp}/rutken-delta.json"
+        baseline_delta_out_args=()
+        if [[ -n "$BASELINE" ]]; then
+          baseline_delta_out_args+=(--baseline-delta-out "$delta_file")
+        fi
+
+        rule_args=()
+        if [[ -n "$RULES" ]]; then
+          IFS=',' read -ra ids <<< "$RULES"
+          for id in "${ids[@]}"; do rule_args+=(--rule "$id"); done
+        fi
+
+        exclude_args=()
+        if [[ -n "$EXCLUDE_RULES" ]]; then
+          IFS=',' read -ra ids <<< "$EXCLUDE_RULES"
+          for id in "${ids[@]}"; do exclude_args+=(--exclude-rule "$id"); done
+        fi
+
+        interproc_args=()
+        if [[ "$INTERPROCEDURAL" == "true" ]]; then
+          interproc_args+=(--interprocedural)
+        fi
+
+        fail_on_args=()
+        if [[ -n "$FAIL_ON" ]]; then
+          fail_on_args+=(--fail-on "$FAIL_ON")
+        fi
+
+        # `rutken batch` has no `--artifact-uri`/`--sarif-artifact-uri` flag
+        # (only the single-APK `rules` verb does), so this only applies on
+        # the `apk` path below -- silently a no-op on `apk-dir`, not an
+        # error, matching the input's own doc comment.
+        artifact_uri_args=()
+        if [[ -n "$ARTIFACT_URI" ]]; then
+          artifact_uri_args+=(--sarif-artifact-uri "$ARTIFACT_URI")
+        fi
+
+        # --- SARIF report (this run's exit code is the authoritative verdict) ---
+        if [[ -n "$APK_DIR" ]]; then
+          "$RUTKEN" batch --apk-dir "$APK_DIR" \
+            "${rule_args[@]}" "${exclude_args[@]}" "${interproc_args[@]}" \
+            --format sarif "${fail_on_args[@]}" > "$SARIF_FILE"
+          code=$?
+        else
+          "$RUTKEN" "$APK" rules \
+            "${rule_args[@]}" "${exclude_args[@]}" "${interproc_args[@]}" \
+            "${baseline_args[@]}" "${baseline_out_args[@]}" "${baseline_delta_out_args[@]}" \
+            --format sarif --out "$SARIF_FILE" "${fail_on_args[@]}" "${artifact_uri_args[@]}"
+          code=$?
+        fi
+
+        # --- markdown step summary (best-effort, never overrides $code) ---
+        if [[ "$STEP_SUMMARY" == "true" && -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          if [[ -n "$APK_DIR" ]]; then
+            "$RUTKEN" batch --apk-dir "$APK_DIR" \
+              "${rule_args[@]}" "${exclude_args[@]}" "${interproc_args[@]}" \
+              --format markdown >> "$GITHUB_STEP_SUMMARY"
+          else
+            "$RUTKEN" "$APK" rules \
+              "${rule_args[@]}" "${exclude_args[@]}" "${interproc_args[@]}" \
+              "${baseline_args[@]}" \
+              --format markdown >> "$GITHUB_STEP_SUMMARY"
+          fi
+        fi
+
+        # --- outputs: always emitted before the final exit ---
+        echo "sarif-file=$SARIF_FILE" >> "$GITHUB_OUTPUT"
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        if command -v jq >/dev/null 2>&1 && [[ -f "$SARIF_FILE" ]]; then
+          total=$(jq '[.runs[].results[]] | length' "$SARIF_FILE" 2>/dev/null)
+          if [[ -n "$total" ]]; then
+            echo "findings-total=$total" >> "$GITHUB_OUTPUT"
+          fi
+        fi
+
+        # --- final verdict, surfaced distinctly from a tool error ---
+        if [[ "$code" -eq 1 ]]; then
+          if [[ -n "$BASELINE" ]]; then
+            echo "::error::rutken exited 1 -- a tool/usage error OR a baseline refusal (unreadable/malformed baseline, or a scan scope narrower than or incomparable to the baseline's). This is deliberately NOT a gate verdict: the scan could not be compared, so no conclusion about new findings was reached. See the log above."
+          else
+            echo "::error::rutken exited with a tool/usage error (exit code 1) -- not a --fail-on gate verdict; see the log above."
+          fi
+        elif [[ "$code" -eq 2 ]]; then
+          if [[ -n "$BASELINE" ]]; then
+            echo "::warning::rutken's --fail-on gate tripped (exit code 2) on a NEW or severity-ESCALATED finding relative to '$BASELINE'. Findings the baseline accepted did not contribute. SARIF ($SARIF_FILE) and the step summary were still written. The step summary's 'Baseline delta' section names each NEW and ESCALATED finding with its id."
+          else
+            echo "::warning::rutken's --fail-on gate tripped (exit code 2). SARIF ($SARIF_FILE) and the step summary were still written."
+          fi
+        fi
+
+        # --- PR baseline-delta comment (best-effort, never overrides $code) ---
+        if [[ "$COMMENT" == "true" ]]; then
+          if [[ -z "$BASELINE" || -n "$APK_DIR" ]]; then
+            echo "::warning::rutken-scan: 'comment' requires 'baseline' to be set and is APK-only (cannot be combined with 'apk-dir'); skipping the PR comment."
+          else
+            token_env="$COMMENT_TOKEN"
+            if [[ -z "$token_env" ]]; then
+              token_env="GITHUB_TOKEN"
+            fi
+            "$RUTKEN" pr comment --delta "$delta_file" --token-env "$token_env"
+            comment_code=$?
+            if [[ "$comment_code" -ne 0 ]]; then
+              echo "::warning::rutken-scan: 'rutken pr comment' exited $comment_code; the PR summary comment may not have been posted/updated. This does not affect the gate verdict (exit code $code)."
+            fi
+          fi
+        fi
+
+        exit "$code"
